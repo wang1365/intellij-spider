@@ -1,7 +1,7 @@
 import queue
-from rule import Rule
-from ruleparser import RuleParser
-from urlloader import UrlLoader
+from rule.rule import Rule
+from rule.ruleparser import RuleParser
+from network.urlloader import UrlLoader
 
 
 class Task(object):

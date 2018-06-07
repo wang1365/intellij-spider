@@ -1,7 +1,7 @@
 def get_rule(name):
     rule_data = None
     try:
-        module = __import__('template.' + name, fromlist=(name))
+        module = __import__('templates.' + name, fromlist=(name))
         rule_data = module.rule
     except ModuleNotFoundError as e:
         print('ModuleNotFoundError, Cannot find rule by name', name, e)
@@ -10,7 +10,7 @@ def get_rule(name):
 
 def test(url, rule_name):
     from task import Task
-    from rule import Rule
+    from rule.rule import Rule
     import pprint
 
     printer = pprint.PrettyPrinter(indent=2)

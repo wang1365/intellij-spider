@@ -1,7 +1,6 @@
 import traceback
 
-from template import keys
-from template import util
+from common import keys, util
 from collections import defaultdict
 
 

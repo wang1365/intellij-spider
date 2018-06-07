@@ -1,4 +1,4 @@
-from template import keys
+from common import keys, util
 
 rule = [
     {
@@ -63,7 +63,6 @@ rule = [
 ]
 
 if __name__ == '__main__':
-    from template import util
     from pathlib import Path
 
     rule_name = Path(__file__).name.split('.')[0]

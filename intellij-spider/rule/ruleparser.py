@@ -1,8 +1,8 @@
 import re
 import json
 import datetime
-from rule import RuleNode, Rule
-from template import keys
+from rule.rule import RuleNode, Rule
+from common import keys
 
 
 class RuleParserResult(object):

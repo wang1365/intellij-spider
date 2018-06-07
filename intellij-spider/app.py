@@ -5,7 +5,7 @@ import schedule
 import json
 import time
 import datetime
-from rule import Rule
+from rule.rule import Rule
 from task import Task
 from threading import Thread
 import queue
