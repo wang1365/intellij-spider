@@ -26,9 +26,9 @@
 ### 如何启动抓取应用
 * 切换当前目录到`intellij-spider/intellij-spider/`
 * 立即抓取使用：
-`python -m apps.sgsc.app`
+`python -m apps.sgsc.app true`
 * 每天凌晨2点定时抓取使用：
-`python -m apps.sgsc.app true 02:00 `
+`python -m apps.sgsc.app false 02:00 `
 
 ### 抓取结果
 * 抓取结果存储在文件中，按照模板每天存储一个文件，存储位置参考`config.py`的`OUTPUT_DIR`
