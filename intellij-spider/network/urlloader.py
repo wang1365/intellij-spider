@@ -49,7 +49,6 @@ class UrlLoader(object):
             print('[{}] request url: {}, proxy: {}'.format(i, url, proxies))
             try:
                 dt = (datetime.datetime.now() - from_t).microseconds // 1000
-                proxies = app_config.proxy_mapping.get_url_proxy(url)
                 # 根据配置选择是否使用会话
                 if app_config.use_session:
                     session = get_current_thread_session()
