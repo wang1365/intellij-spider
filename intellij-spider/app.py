@@ -126,6 +126,7 @@ class App(object):
 
             if tr.data:
                 app.data_queue.put((task, tr.data))
+        print('Task 1 thread done !')
 
     @classmethod
     def run_worker2(cls, app):
@@ -147,16 +148,20 @@ class App(object):
 
             if tr.data:
                 app.data_queue.put((task, tr.data))
+        print('Task 2 thread done !')
 
     @classmethod
     def run_store(cls, app):
         while app.is_running:
             grouped_data = defaultdict(lambda: [])
-            try:
-                while 1:
+            while 1:
+                try:
                     task, data = app.data_queue.get(block=False)
                     grouped_data[task.rule.name].append(data)
-            except queue.Empty as e:
+                except queue.Empty:
+                    break
+
+            if not grouped_data:
                 time.sleep(0.1)
                 continue
 
@@ -169,8 +174,7 @@ class App(object):
                     for data in data_list:
                         f.writelines(json.dumps(data, ensure_ascii=False) + '\n')
 
-            if not grouped_data:
-                time.sleep(0.1)
+        print('Storing thread done !')
 
     @classmethod
     def now(cls):
