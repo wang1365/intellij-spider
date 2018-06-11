@@ -113,6 +113,7 @@ class App(object):
                 task = app.task_normal_queue.get()
             except queue.Empty as e:
                 time.sleep(0.1)
+                continue
             tr = task.execute()
             if tr.sub_tasks:
                 for t in tr.sub_tasks:
@@ -133,6 +134,7 @@ class App(object):
                 task = app.task_proxy_queue.get(block=False)
             except queue.Empty as e:
                 time.sleep(0.1)
+                continue
             tr = task.execute()
             if tr.sub_tasks:
                 for t in tr.sub_tasks:
@@ -155,7 +157,8 @@ class App(object):
                     task, data = app.data_queue.get(block=False)
                     grouped_data[task.rule.name].append(data)
             except queue.Empty as e:
-                pass
+                time.sleep(0.1)
+                continue
 
             for rule_name, data_list in grouped_data.items():
                 path = pathlib.Path(OUTPUT_DIR) / '{}/{}/{}.txt'.format(app.name, cls.now(), rule_name)
