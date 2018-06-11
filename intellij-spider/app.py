@@ -109,7 +109,10 @@ class App(object):
     @classmethod
     def run_worker1(cls, app):
         while app.is_running:
-            task = app.task_normal_queue.get()
+            try:
+                task = app.task_normal_queue.get()
+            except queue.Empty as e:
+                time.sleep(0.1)
             tr = task.execute()
             if tr.sub_tasks:
                 for t in tr.sub_tasks:
@@ -126,7 +129,10 @@ class App(object):
     @classmethod
     def run_worker2(cls, app):
         while app.is_running:
-            task = app.task_proxy_queue.get()
+            try:
+                task = app.task_proxy_queue.get(block=False)
+            except queue.Empty as e:
+                time.sleep(0.1)
             tr = task.execute()
             if tr.sub_tasks:
                 for t in tr.sub_tasks:
