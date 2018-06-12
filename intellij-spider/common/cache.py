@@ -30,8 +30,8 @@ def daily_cache_for_str(func):
         h.update(url.encode())
         cache_file = cache_dir / h.hexdigest()
         if not cache_file.exists():
-            result = func(*args, **kwarg)
-            if result is not None:
+            ok, result = func(*args, **kwarg)
+            if ok:
                 with open(cache_file, 'w', encoding='utf8') as fp:
                     fp.write(result)
                     print('Save to cache, url: {}, file: {}, size: {}'.format(url, cache_file, len(result)))

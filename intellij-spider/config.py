@@ -51,10 +51,42 @@ class ProxyMapping(object):
         self._url_proxies = []
 
 
+class FailureCondition(object):
+    def __init__(self, failure_map: dict = None):
+        """
+        初始化下载失败场景
+        :param failure_map: 失败场景映射表，
+        例如：{
+            'tamall.com': ['下载失败', '请求过于频繁'],
+            'www.jd.com': '"error_code":-1'
+        }
+        """
+        self._failure_map = failure_map if failure_map is not None else {}
+
+    def get_failure_str_list(self, url):
+        ret = []
+        for k, v in self._failure_map.items():
+            if k in url:
+                ret.append(v) if isinstance(v, str) else ret.extend(v)
+        return ret
+
+    def test(self, url, content):
+        ret = True
+        failure_list = self.get_failure_str_list(url)
+        if failure_list:
+            for failure_item in failure_list:
+                if failure_item in content:
+                    print('Wrong response content, fail condition: ', failure_item)
+                    ret = False
+                    break
+        return ret
+
+
 class Configuration(object):
     def __init__(self, proxy_config: ProxyMapping = None, use_session=False):
         self._proxy = ProxyMapping() if not proxy_config else proxy_config
         self._use_session = use_session
+        self._fail_conditions = FailureCondition()
 
     @property
     def proxy_mapping(self):
@@ -68,5 +100,12 @@ class Configuration(object):
     def use_session(self):
         return self._use_session
 
+    @property
+    def fail_conditions(self):
+        return self._fail_conditions
+
+    @fail_conditions.setter
+    def fail_conditions(self, v):
+        self._fail_conditions = v
 
 app_config = Configuration()

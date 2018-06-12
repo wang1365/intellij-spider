@@ -174,6 +174,7 @@ class App(object):
                     for data in data_list:
                         f.writelines(json.dumps(data, ensure_ascii=False) + '\n')
 
+
         print('Storing thread done !')
 
     @classmethod

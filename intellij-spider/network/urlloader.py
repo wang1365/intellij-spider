@@ -38,7 +38,7 @@ class UrlLoader(object):
     @classmethod
     @daily_cache_for_str
     def load(cls, url, retry=20):
-        result = None
+        ok, result = False, None
 
         # 代理设置
         proxies = app_config.proxy_mapping.get_url_proxy(url)
@@ -61,7 +61,10 @@ class UrlLoader(object):
                 if res.ok:
                     print('[{}] request url success, takes: {} ms, size:{}, {}'.format(i, dt, len(res.text), url))
                     result = res.text if res.encoding in ('gbk', 'GBK', 'gb2312', None) else res.content.decode('utf8')
-                    break
+                    # 根据配置检查是否是正常的返回内容，如果不是，重新抓取
+                    if app_config.fail_conditions.test(url, result):
+                        ok = True
+                        break
                 else:
                     print('[{}] request url failed, code: {}, takes: {} ms, reason:{}'.format(i, res.status_code, dt,
                                                                                           res.reason))
@@ -69,8 +72,8 @@ class UrlLoader(object):
                 print('[{}] request url failed, error: {}'.format(i, e))
                 # import traceback
                 # traceback.print_exc()
-                time.sleep(0.2)
-        return result
+            time.sleep(0.1)
+        return ok, result
 
 
 if __name__ == '__main__':
