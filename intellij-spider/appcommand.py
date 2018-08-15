@@ -1,41 +1,21 @@
-# 是否使用同步模型（多线程）（异步模型为gevent）
-EXECUTE_SYNC = True
+from config import app_config, AppMode
+from common.log import logger
 
 
-def start_app(appname, url, rule_name, now=False):
-    """
-    启动application
-    :param appname: 应用名称
-    :param url: 入口链接
-    :param rule_name: 入口链接对应的解析规则
-    :param now: 是否立即执行，True：立即执行，False：定时执行
-    :return:
-    """
-    def run(now=False, time='1:01'):
-        if EXECUTE_SYNC:
-            from app import App
-            app = App(appname, url, rule_name)
-            if now:
-                app.schedule(normal_thread_count=3, proxy_thread_count=15)
-            else:
-                app.schedule(normal_thread_count=3, proxy_thread_count=15, start_time=time)
-        else:
-            from asyncapp import AsyncApp
-            app = AsyncApp(appname, url, rule_name)
-            if now:
-                app.schedule(parallelism=10)
-            else:
-                app.schedule(parallelism=10, start_time=time)
-
-    if now:
-        run(True)
+def start_app(app_name, url, rule_name, process_count=3, proxy_process_count=15):
+    mode = app_config.app_mode
+    logger.info('Start app [{}] with mode [{}]'.format(app_name, mode))
+    if mode == AppMode.MULTI_THREAD:
+        from app_threaded import App
+        app = App(app_name, url, rule_name)
+        app.schedule(process_count, proxy_process_count)
+    elif mode == AppMode.THREAD_POOL:
+        from app_pooled import App
+        app = App(app_name, url, rule_name)
+        app.schedule(process_count, proxy_process_count)
+    elif mode == AppMode.MULTI_PROCESS:
+        from app_processed import App
+        app = App(app_name, url, rule_name)
+        app.schedule(process_count)
     else:
-        import fire
-        fire.Fire(run)
-
-
-if __name__ == '__main__':
-    APP_NAME = 'jd'
-    URL = 'https://list.jd.hk/list.html?cat=1316,16831'
-    RULE_NAME = 'jd_cat2'
-    start_app('test', URL, RULE_NAME, True)
+        logger.error('Not support mode: %s', mode)

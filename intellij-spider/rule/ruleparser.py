@@ -2,7 +2,8 @@ import re
 import json
 import datetime
 from rule.rule import RuleNode, Rule
-from common import keys
+from common.consts import Keys, NodeType
+from common.log import logger
 
 
 class RuleParserResult(object):
@@ -34,9 +35,9 @@ class RuleParser(object):
         return self._vars.get(k)
 
     def set_var(self, k, v):
-        print('set new var:', k, v)
+        logger.debug('set new var:{} {}'.format(k, v))
         if self._vars.get(k):
-            print('Warning, overwrite existed key:', k, self._vars.get(k), v)
+            logger.warn('Warning, overwrite existed key:{} {} {}'.format(k, self._vars.get(k), v))
         self._vars[k] = v
 
     def parse(self) -> RuleParserResult:
@@ -57,13 +58,13 @@ class RuleParser(object):
 
     def parse_node(self, rule_node: RuleNode, content: str):
         if not rule_node:
-            raise ValueError
+            return None, None, {}
 
         if not content:
             return rule_node.name, None, {}
 
         # 其他翻页提取
-        if rule_node.type == RuleNode.TYPE_PAGE_FLIP:
+        if rule_node.type == NodeType.PAGE_FLIP:
             value, new_links = self.parse_node_page_flip(rule_node)
             return rule_node.name, value, new_links
 
@@ -83,51 +84,83 @@ class RuleParser(object):
         value, new_links = [], {}
         current_page = self.get_current_page()
         page_count = self.get_page_count()
+        total_item_count = self.get_total_item_count()
         page_step = self.get_page_step()
         page_url_pattern = self.get_page_url_pattern()
+        max_page_count = self.get_max_page_count()
 
-        # 只有当前页面是第一页时才提取其他页面
+        # 只有当前页面是第一页时才提取其他分页
         if current_page == 1 and page_step > 0 and page_count > 0 and page_url_pattern:
             start = 2 if page_step == 1 else 1
-            end = page_count + 1 if page_step == 1 else page_count
+            end = min(page_count + 1 if page_step == 1 else page_count, max_page_count)
             for i in range(start, end):
                 page = page_url_pattern.format(page=i*page_step)
                 value.append(page)
                 new_links[page] = rule_node.link_rule
+
+        if current_page == 1 and page_step > 0 and total_item_count >= 0 and page_url_pattern:
+            new_links = {}
+            start, end = 1, min(total_item_count//page_step+1, max_page_count)+1
+
+            for i in range(start, end):
+                page = page_url_pattern.format(page=i)
+                value.append(page)
+                new_links[page] = rule_node.link_rule
+
         return value, new_links
 
     def get_current_page(self):
         current_page = 0
         try:
-            data = self.get_var(keys.VAR_CURRENT_PAGE)
+            data = self.get_var(Keys.VAR_CURRENT_PAGE.value)
             if data:
                 current_page = int(data)
         except Exception as e:
-            print('get_current_page failed!', e)
+            logger.error('get_current_page failed! {}'.format(e))
         return current_page
 
     def get_page_count(self):
         page_count = 0
         try:
-            data = self.get_var(keys.VAR_PAGE_COUNT)
+            data = self.get_var(Keys.VAR_PAGE_COUNT.value)
             if data:
                 page_count = int(data)
         except Exception as e:
-            print('get_page_count failed!', e)
+            logger.error('get_page_count failed! {}'.format(e))
         return page_count
+
+    def get_total_item_count(self):
+        total_item_count = -1
+        try:
+            data = self.get_var(Keys.VAR_PAGE_ITEM_TOTAL_COUNT.value)
+            if data:
+                total_item_count = int(data)
+        except Exception as e:
+            logger.error('total_item_count failed! {}'.format(e))
+        return total_item_count
 
     def get_page_step(self):
         page_step = 1
         try:
-            data = self.get_var(keys.VAR_PAGE_STEP)
+            data = self.get_var(Keys.VAR_PAGE_STEP.value)
             if data:
                 page_step = int(data)
         except Exception as e:
-            print('get_page_step failed!', e)
+            logger.error('get_page_step failed! {}'.format(e))
         return page_step
 
+    def get_max_page_count(self):
+        max_page_count = 1024
+        try:
+            data = self.get_var(Keys.VAR_PAGE_MAX_COUNT.value)
+            if data:
+                max_page_count = int(data)
+        except Exception as e:
+            logger.error('get_max_page_count failed! {}'.format(e))
+        return max_page_count
+
     def get_page_url_pattern(self):
-        return self.get_var(keys.VAR_PAGE_URL_PATTERN)
+        return self.get_var(Keys.VAR_PAGE_URL_PATTERN.value) or ''
 
     def parse_node_search_1st(self, node: RuleNode, content):
         key, value, new_links = node.name, {}, {}
@@ -136,7 +169,7 @@ class RuleParser(object):
             # 查找第一个匹配
             search_ret = re.search(item.regex, content)
             if not search_ret:
-                print('Regex match failed, re: {}, {}'.format(item.regex, self._url))
+                logger.info('Regex match failed, re: {}, {}'.format(item.regex, self._url))
                 continue
 
             g0, groups = search_ret.group(0), search_ret.groups()
@@ -155,13 +188,13 @@ class RuleParser(object):
                 try:
                     m = json.loads(m, encoding='utf8')
                 except Exception as e:
-                    print('Convert to json failed !', m, e)
+                    logger.error('Convert to json failed ! {}, {}'.format(m, e))
                     m = None
             value = m
-            if node.type == RuleNode.TYPE_VAR:
+            if node.type == NodeType.VARIOUS:
                 self.set_var(node.name, m)
             # 当前解析节点需要提取链接
-            if node.type == node.TYPE_LINK:
+            if node.type == NodeType.LINK:
                 if isinstance(m, str):
                     new_links[m] = node.link_rule
                 elif isinstance(m, list):
@@ -180,13 +213,13 @@ class RuleParser(object):
             # 查找第一个匹配, 用于保存$0
             search_ret = re.search(item.regex, content)
             if not search_ret:
-                print('Regex match failed, re: {}, {}'.format(item.regex, self._url))
+                logger.info('Regex match failed, re: {}, {}'.format(item.regex, self._url))
                 continue
             # 需要查找所有匹配的场景，返回数组
             result = re.findall(item.regex, content)
 
             if not result:
-                print('{} parse failed'.format(rule_node.name))
+                logger.info('{} parse failed'.format(rule_node.name))
             else:
                 # $0,$1...取值
                 result = [self.query_content_for_multi(item.query, groups, groups) for groups in result]
@@ -199,7 +232,7 @@ class RuleParser(object):
             # 没有子解析项，直接输出匹配后的内容
             value = m if not rule_node.jsonfied else [json.loads(i, encoding='utf8') for i in m]
             # 当前解析节点需要提取链接
-            if rule_node.type == rule_node.TYPE_LINK:
+            if rule_node.type == NodeType.LINK:
                 for m_item in m:
                     new_links[m_item] = rule_node.link_rule
         else:
@@ -275,8 +308,7 @@ class RuleParser(object):
 
     def replace_vars(self, content: str):
         """
-        变量替换，变量格式为${various}, 替换内容为名称为various的解析项，且
-        该解析项类型为key.TYPE == RuleNode.TYPE_VAR
+        变量替换，变量格式为${various}, 替换内容为名称为various的解析项
         :param content: 源内容
         :return:
         """

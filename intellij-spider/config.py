@@ -1,5 +1,6 @@
 import os
 import re
+from common.util import today_str
 
 IS_WINDOWS = (os.name == 'nt')
 
@@ -17,14 +18,24 @@ OUTPUT_DIR = 'c:/data/' if IS_WINDOWS else '/home/wangxiaochuan/data/'
 
 
 class Proxies(object):
-    PROXY_INTERNAL = {
-        'http': 'http://127.0.0.1:8080',
-        'https': 'http://127.0.0.1:8080'
+    ADSL_HIGH = {
+        'http': 'http://127.0.0.1:61334',
+        'https': 'http://127.0.0.1:61334'
     }
 
-    PROXY_EXTERNAL = {
-        'http': 'http://127.0.0.1:8080',
-        'https': 'http://127.0.0.1:8080'
+    ADSL_LOW = {
+        'http': 'http://127.0.0.1:61334',
+        'https': 'http://127.0.0.1:61334'
+    }
+
+    FOREIGN = {
+        'http': 'http://127.0.0.1:61336',
+        'https': 'http://127.0.0.1:61336'
+    }
+
+    INTERN = {
+        'http': 'http://127.0.0.1:61337',
+        'https': 'http://127.0.0.1:61337'
     }
 
     NONE = {}
@@ -47,8 +58,37 @@ class ProxyMapping(object):
         self._url_proxies.append((url_pattern, proxy))
         return self
 
+    @classmethod
+    def of_asdl_high(cls):
+        return ProxyMapping().add_url_proxy('.*', Proxies.ADSL_HIGH)
+
+    @classmethod
+    def of_asdl_low(cls):
+        return ProxyMapping().add_url_proxy('.*', Proxies.ADSL_LOW)
+
     def clear(self):
         self._url_proxies = []
+
+
+class RefererConfig(object):
+    def __init__(self):
+        self._url_referer = {}
+
+    def get_url_referer(self, url: str) -> str:
+        referer_rule = None
+        for url_pattern, value in self._url_referer.items():
+            result = re.search(url_pattern, url)
+            if result:
+                referer_rule = value
+                break
+        return referer_rule
+
+    def add_url_referer(self, url_pattern: str, host=None, use_parent_link=False):
+        self._url_referer[url_pattern] = {'host': host, 'use_parent_link': use_parent_link}
+        return self
+
+    def clear(self):
+        self._url_referer = {}
 
 
 class FailureCondition(object):
@@ -71,6 +111,13 @@ class FailureCondition(object):
         return ret
 
     def test(self, url, content):
+        """
+        根据配置（反扒响应条件）检查是否是期望的内容（如果URL被反扒，响应内容返回错误的信息）
+        检查通过，则URL内容正确；检查失败，说明该请求被反扒.
+        :param url:
+        :param content:
+        :return:
+        """
         ret = True
         failure_list = self.get_failure_str_list(url)
         if failure_list:
@@ -82,30 +129,35 @@ class FailureCondition(object):
         return ret
 
 
+class AppMode(object):
+    MULTI_THREAD = 'multi-thread'
+    THREAD_POOL = 'thread-pool'
+    MULTI_PROCESS = 'multi-process'
+    PROCESS_POOL = 'process-pool'
+    ASYNC = 'async'
+
+
+class CacheMode(object):
+    LOCAL_FILE = 'local-file'
+    ELASTICSEARCH = 'elasticsearch'
+
+
 class Configuration(object):
     def __init__(self, proxy_config: ProxyMapping = None, use_session=False):
-        self._proxy = ProxyMapping() if not proxy_config else proxy_config
-        self._use_session = use_session
-        self._fail_conditions = FailureCondition()
+        self.proxy_mapping = ProxyMapping() if not proxy_config else proxy_config
+        self.use_session = use_session
+        self.fail_conditions = FailureCondition()
+        self.referer_config = RefererConfig()
 
-    @property
-    def proxy_mapping(self):
-        return self._proxy
+        # 是否自动生成job ID，如果是，则在文件名中自动添加job id
+        self.auto_generate_job_id = False
+        # 是否按天分割文件
+        self.auto_generate_daily_file = True
+        self.no_save = False
+        self.app_name = 'default'
+        self.app_start_date = today_str()
+        self.cache_mode = CacheMode.LOCAL_FILE
+        self.app_mode = AppMode.MULTI_THREAD
 
-    @proxy_mapping.setter
-    def proxy_mapping(self, v):
-        self._proxy = v
-
-    @property
-    def use_session(self):
-        return self._use_session
-
-    @property
-    def fail_conditions(self):
-        return self._fail_conditions
-
-    @fail_conditions.setter
-    def fail_conditions(self, v):
-        self._fail_conditions = v
 
 app_config = Configuration()

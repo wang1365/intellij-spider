@@ -1,7 +1,10 @@
 import traceback
 
-from common import keys, util
+from common import util
+from common.consts import Keys, NodeType
+from common.log import logger
 from collections import defaultdict
+from enum import Enum
 
 
 class RegexItem(object):
@@ -21,13 +24,6 @@ class RuleNode(object):
     """
     解析节点，树状结构，可以包含若干个子解析节点
     """
-    TYPE_COMMON = 0
-    TYPE_LINK = 1
-    TYPE_VAR = 2
-    # 翻页链接提取节点，使用该节点时需要定义3个变量，1：当前页码${currentPage}, 2:总页数${pageCount}
-    # 3.页面链接${pageUrlPattern},页码需要使用{page}站位，如'http://www.test.com?page={page}'
-    TYPE_PAGE_FLIP = 3
-
     REGEX_FIND_1ST = 0
     REGEX_FIND_ALL = 1
 
@@ -37,9 +33,8 @@ class RuleNode(object):
     def __init__(self, name):
         self._name = name
         # 解析节点类型，常规/链接提取/变量/翻页提取
-        self._type = self.TYPE_COMMON
+        self._type = NodeType.NORMAL
         # 正则表达式
-        self._regex = '[\s\S]*'
         self._regex_items = []
         # 匹配结果取值
         self._query = '$0'
@@ -76,14 +71,6 @@ class RuleNode(object):
     @type.setter
     def type(self, v):
         self._type = v
-
-    @property
-    def regex(self):
-        return self._regex
-
-    @regex.setter
-    def regex(self, v):
-        self._regex = v
 
     @property
     def regex_items(self):
@@ -178,55 +165,56 @@ class RuleNode(object):
         """
         node = None
         try:
-            node = RuleNode(data[keys.NAME])
 
-            regex_items = data.get(keys.REGEX)
+            raw_name = data[Keys.NAME]
+            node = RuleNode(raw_name.value if isinstance(raw_name, Enum) else str(raw_name))
+
+            regex_items = data.get(Keys.REGEX)
             if regex_items and isinstance(regex_items, (tuple, list)):
                 for item in regex_items:
                     node.regex_items.append(RegexItem(item[0], item[1]))
             else:
-                print('Init rule warning, invalid regex for item', data[keys.NAME])
+                logger.info('Init rule warning, invalid regex for item: {}'.format(data[Keys.NAME]))
 
-            query = data.get(keys.QUERY)
+            query = data.get(Keys.QUERY)
             if query:
                 node.query = query
 
-            node.type = cls.get_option(data.get(keys.TYPE), RuleNode.TYPE_COMMON, {
-                '0': RuleNode.TYPE_COMMON,
-                '1': RuleNode.TYPE_LINK,
-                '2': RuleNode.TYPE_VAR,
-                '3': RuleNode.TYPE_PAGE_FLIP,
-            })
+            node.type = data.get(Keys.TYPE) or NodeType.NORMAL
 
-            node.remove_html = cls.get_option(data.get(keys.REMOVE_HTML), False, {'0': False, '1': True})
-            node.jsonfied = cls.get_option(data.get(keys.JSONFIED), False, {'0': False, '1': True})
+            node.remove_html = cls.get_option(data.get(Keys.REMOVE_HTML), False, {'0': False, '1': True})
+            node.jsonfied = cls.get_option(data.get(Keys.JSONFIED), False, {'0': False, '1': True})
 
-            link_rule = data.get(keys.LINK_RULE)
+            link_rule = data.get(Keys.LINK_RULE)
             if link_rule:
                 node.link_rule = link_rule
 
-            func = data.get(keys.FUNCTION)
+            func = data.get(Keys.FUNCTION)
             if func:
                 node.function = func
 
-            unicode_to_cn = data.get(keys.UNICODE_TO_CN)
+            max_page_count = data.get(Keys.VAR_PAGE_MAX_COUNT)
+            if max_page_count:
+                node.max_page_count = int(max_page_count)
+
+            unicode_to_cn = data.get(Keys.UNICODE_TO_CN)
             if unicode_to_cn:
                 node.unicode_to_cn = (unicode_to_cn == '1')
 
-            post_replaces = data.get(keys.POST_REPLACES)
+            post_replaces = data.get(Keys.POST_REPLACES)
             if isinstance(post_replaces, (list, tuple, set)):
                 node.post_replaces = post_replaces
 
-            node.search_mode = RuleNode.REGEX_FIND_ALL if data.get(keys.SEARCH_MODE) == '1' else RuleNode.REGEX_FIND_1ST
-            node.source = RuleNode.SOURCE_URL if data.get(keys.SOURCE) == '1' else RuleNode.SOURCE_CONTENT
+            node.search_mode = RuleNode.REGEX_FIND_ALL if data.get(Keys.SEARCH_MODE) == '1' else RuleNode.REGEX_FIND_1ST
+            node.source = RuleNode.SOURCE_URL if data.get(Keys.SOURCE) == '1' else RuleNode.SOURCE_CONTENT
 
-            items = data.get(keys.CHILDREN)
+            items = data.get(Keys.CHILDREN)
             if items:
                 for item in items:
                     node.children.append(cls.from_json(item))
         except Exception as e:
-            print('Generate rule error from json,', e, data)
-            traceback.print_exc()
+            logger.info('Generate rule error from json, {} {}'.format(e, data))
+            traceback.logger.info_exc()
         return node
 
     @classmethod
@@ -258,7 +246,7 @@ class Rule(object):
     @classmethod
     def from_json(cls, rule_name, data: list):
         if not isinstance(data, list):
-            print('Error, cannot convert to rule from a non-json data')
+            logger.info('Error, cannot convert to rule from a non-json data')
             return None
         rule = Rule(rule_name)
         for item in data:
@@ -300,30 +288,30 @@ def test_rule_node():
     assert not node.link_rule
 
     data = {
-        keys.NAME: 'wangxiaochuan',
-        keys.REGEX: 'regix expression',
-        keys.QUERY: '$1-$2',
-        keys.JSONFIED: '1',
-        keys.TYPE: '2',
-        keys.LINK_RULE: 'link rule',
-        keys.FUNCTION: lambda x: 1,
-        keys.UNICODE_TO_CN: '1',
-        keys.SEARCH_MODE: '1',
-        keys.SOURCE: '1',
-        keys.REMOVE_HTML: '1'
+        Keys.NAME: 'wangxiaochuan',
+        Keys.REGEX: 'regix expression',
+        Keys.QUERY: '$1-$2',
+        Keys.JSONFIED: '1',
+        Keys.TYPE: '2',
+        Keys.LINK_RULE: 'link rule',
+        Keys.FUNCTION: lambda x: 1,
+        Keys.UNICODE_TO_CN: '1',
+        Keys.SEARCH_MODE: '1',
+        Keys.SOURCE: '1',
+        Keys.REMOVE_HTML: '1'
     }
     node = RuleNode.from_json(data)
 
     assert node is not None
-    assert node.regex == data[keys.REGEX]
+    assert node.regex == data[Keys.REGEX]
     assert node.type == RuleNode.TYPE_VAR
-    assert node.query == data[keys.QUERY]
+    assert node.query == data[Keys.QUERY]
     assert node.unicode_to_cn
-    assert node.function == data[keys.FUNCTION]
+    assert node.function == data[Keys.FUNCTION]
     assert node.jsonfied
     assert node.source == RuleNode.SOURCE_URL
     assert node.remove_html
-    assert node.link_rule == data[keys.LINK_RULE]
+    assert node.link_rule == data[Keys.LINK_RULE]
 
 
 if __name__ == '__main__':
