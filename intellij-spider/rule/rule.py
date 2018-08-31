@@ -1,7 +1,7 @@
 import traceback
 
 from common import util
-from common.consts import Keys, NodeType
+from common.consts import *
 from common.log import logger
 from collections import defaultdict
 from enum import Enum
@@ -27,9 +27,6 @@ class RuleNode(object):
     REGEX_FIND_1ST = 0
     REGEX_FIND_ALL = 1
 
-    SOURCE_CONTENT = 0
-    SOURCE_URL = 1
-
     def __init__(self, name):
         self._name = name
         # 解析节点类型，常规/链接提取/变量/翻页提取
@@ -43,7 +40,7 @@ class RuleNode(object):
         # 提取的链接后续应用的解析规则Rule
         self._link_rule = None
         # 内容来源，HTTP返回body，或者当前URL链接
-        self._source = self.SOURCE_CONTENT
+        self._source = Source.CONTENT
         # 子解析项列表
         self._children = []
         # 是否去除内容中的HTML标签
@@ -206,15 +203,15 @@ class RuleNode(object):
                 node.post_replaces = post_replaces
 
             node.search_mode = RuleNode.REGEX_FIND_ALL if data.get(Keys.SEARCH_MODE) == '1' else RuleNode.REGEX_FIND_1ST
-            node.source = RuleNode.SOURCE_URL if data.get(Keys.SOURCE) == '1' else RuleNode.SOURCE_CONTENT
+            node.source = data.get(Keys.SOURCE) or Source.CONTENT
 
             items = data.get(Keys.CHILDREN)
             if items:
                 for item in items:
                     node.children.append(cls.from_json(item))
         except Exception as e:
-            logger.info('Generate rule error from json, {} {}'.format(e, data))
-            traceback.logger.info_exc()
+            logger.error('Generate rule error from json, {} {}'.format(e, data))
+            traceback.print_exc()
         return node
 
     @classmethod

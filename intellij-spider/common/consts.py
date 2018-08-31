@@ -5,6 +5,7 @@ from enum import Enum, unique
 """
 
 
+
 @unique
 class Keys(Enum):
     # 解析节点名称
@@ -52,3 +53,10 @@ class NodeType(Enum):
     LINK = 1
     VARIOUS = 2
     PAGE_FLIP = 3
+
+
+@unique
+class Source(Enum):
+    LINK = 0
+    CONTENT = 1
+

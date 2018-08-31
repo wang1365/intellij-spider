@@ -1,41 +1,34 @@
 import os
 import re
 from common.util import today_str
+from common.log import logger
 
 IS_WINDOWS = (os.name == 'nt')
-
-# Proxy settings
-USE_PROXY = True
 
 # request interval (unit/seconds)
 REQUEST_INTERVAL = 0
 
 # Cache
-CACHE_DIR = 'c:/cache/' if IS_WINDOWS else '/home/wangxiaochuan/cache/'
+CACHE_DIR = 'c:/cache/' if IS_WINDOWS else '/home/wxc/cache/'
 
 # Output directory
-OUTPUT_DIR = 'c:/data/' if IS_WINDOWS else '/home/wangxiaochuan/data/'
+OUTPUT_DIR = 'c:/data/' if IS_WINDOWS else '/home/wxc/data/'
 
 
 class Proxies(object):
     ADSL_HIGH = {
-        'http': 'http://127.0.0.1:61334',
-        'https': 'http://127.0.0.1:61334'
+        'http': 'http://proxy',
+        'https': 'http://proxy''
     }
 
     ADSL_LOW = {
-        'http': 'http://127.0.0.1:61334',
-        'https': 'http://127.0.0.1:61334'
+        'http': 'http://proxy',
+        'https': 'http://proxy''
     }
 
     FOREIGN = {
-        'http': 'http://127.0.0.1:61336',
-        'https': 'http://127.0.0.1:61336'
-    }
-
-    INTERN = {
-        'http': 'http://127.0.0.1:61337',
-        'https': 'http://127.0.0.1:61337'
+        'http': 'http://proxy',
+        'https': 'http://proxy''
     }
 
     NONE = {}
@@ -123,10 +116,13 @@ class FailureCondition(object):
         if failure_list:
             for failure_item in failure_list:
                 if failure_item in content:
-                    print('Wrong response content, fail condition: ', failure_item)
+                    logger.warn('Wrong response content, fail condition: %s', failure_item)
                     ret = False
                     break
         return ret
+
+    def __str__(self) -> str:
+        return str(self._failure_map)
 
 
 class AppMode(object):
@@ -143,21 +139,36 @@ class CacheMode(object):
 
 
 class Configuration(object):
-    def __init__(self, proxy_config: ProxyMapping = None, use_session=False):
+    def __init__(self, proxy_config: ProxyMapping=None, use_session=False):
         self.proxy_mapping = ProxyMapping() if not proxy_config else proxy_config
         self.use_session = use_session
         self.fail_conditions = FailureCondition()
         self.referer_config = RefererConfig()
 
-        # 是否自动生成job ID，如果是，则在文件名中自动添加job id
-        self.auto_generate_job_id = False
-        # 是否按天分割文件
-        self.auto_generate_daily_file = True
         self.no_save = False
         self.app_name = 'default'
         self.app_start_date = today_str()
         self.cache_mode = CacheMode.LOCAL_FILE
         self.app_mode = AppMode.MULTI_THREAD
 
+    def __str__(self) -> str:
+        return {
+            'proxy_mapping': str(self.proxy_mapping),
+            'use_session': self.use_session,
+            'fail_conditions': str(self.fail_conditions),
+            'referer_config': self.referer_config,
+            'cache_mode': self.cache_mode,
+            'app_mode': self.app_mode
+        }.__str__()
+
 
 app_config = Configuration()
+
+
+def get_app_config():
+    return app_config
+
+
+def set_app_config(config):
+    global app_config
+    app_config = config

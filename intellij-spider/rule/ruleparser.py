@@ -2,7 +2,7 @@ import re
 import json
 import datetime
 from rule.rule import RuleNode, Rule
-from common.consts import Keys, NodeType
+from common.consts import Keys, NodeType, Source
 from common.log import logger
 
 
@@ -68,7 +68,7 @@ class RuleParser(object):
             value, new_links = self.parse_node_page_flip(rule_node)
             return rule_node.name, value, new_links
 
-        content = content if rule_node.source == rule_node.SOURCE_CONTENT else self._url
+        content = content if rule_node.source == Source.CONTENT else self._url
         if rule_node.search_mode == RuleNode.REGEX_FIND_1ST:
             value, new_links = self.parse_node_search_1st(rule_node, content)
         else:

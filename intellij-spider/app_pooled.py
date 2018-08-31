@@ -8,7 +8,7 @@ from task import Task
 from threading import Thread
 import queue
 from config import *
-from config import app_config
+from config import get_app_config
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty
 from app import BaseApp
@@ -50,7 +50,7 @@ class Job(object):
     my_app.schedule()
     """
 
-    def __init__(self, name: str, urls: list, rule_name: str, normal_thread_count=2, proxy_thread_count=1):
+    def __init__(self, name: str, urls: list, rule_name: str, normal_thread_count=2):
         """
         初始化一个抓取应用
         :param name: 应用名
@@ -61,13 +61,8 @@ class Job(object):
         self.urls = urls
         self.rule_name = rule_name
 
-        # 不使用代理的下载queue1/worker_normal_threads
         self.normal_task_queue = None
         self.normal_thread_count = 1
-
-        # 使用代理的下载queue2/worker_proxy_threads
-        self.proxy_task_queue = None
-        self.proxy_thread_count = 1
 
         # 解析结果存储 data_queue / store_thread
         self.data_queue = None
@@ -75,17 +70,11 @@ class Job(object):
 
         self.is_running = False
         self.normal_thread_count = normal_thread_count
-        self.proxy_thread_count = proxy_thread_count
 
         self.id = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 
         self.normal_task_pool = ThreadPoolExecutor(max_workers=normal_thread_count, thread_name_prefix='normal_task')
-        self.proxy_task_pool = ThreadPoolExecutor(max_workers=proxy_thread_count, thread_name_prefix='proxy_task')
 
-    @classmethod
-    def is_proxy_url(cls, url):
-        pm = app_config.proxy_mapping
-        return pm.get_url_proxy(url) is not None
 
     @classmethod
     def run_worker(cls, task, app):
@@ -148,7 +137,6 @@ class Job(object):
         while 1:
             try:
                 task: Task = self.normal_task_queue.get(block=False)
-                # task_pool = self.proxy_task_pool if self.is_proxy_url(task.url.value) else self.normal_task_pool
                 task_pool = self.normal_task_pool
 
                 task_pool.submit(self.run_worker, task, self)
@@ -178,16 +166,15 @@ class App(BaseApp):
         super(App, self).__init__(name, url, rule_name)
 
     def start_job(self):
-        job = Job(self.name, self.urls, self.rule_name, self.normal_thread_count,
-                  self.proxy_thread_count)
+        job = Job(self.name, self.urls, self.rule_name, self.normal_thread_count)
         job.start()
 
-    def schedule(self, normal_thread_count=2, proxy_thread_count=10):
-        self.normal_thread_count, self.proxy_thread_count = normal_thread_count, proxy_thread_count
+    def schedule(self, normal_thread_count=2):
+        self.normal_thread_count = normal_thread_count
         self.start_job()
 
 
 if __name__ == '__main__':
-    app_config.proxy_mapping = ProxyMapping.of_asdl_high()
+    get_app_config().proxy_mapping = ProxyMapping.of_asdl_high()
     app = App('sync_app', rule_name='jd_page', url='https://list.jd.hk/list.html?cat=1316,1381,1389&page=1')
     app.schedule()

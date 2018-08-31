@@ -1,27 +1,26 @@
 import pathlib
 from collections import defaultdict
-
-import json
 import datetime
 from rule.rule import Rule
 from task import Task
 from config import *
 from network.urlloader import Url
-from config import app_config
+from config import set_app_config, get_app_config
 from multiprocessing import Process, Queue, Lock
-import time, os
+import time
 from queue import Empty
 from app import BaseApp
 from common.log import logger
 from common.util import writelines
+from threading import Thread
 
 '''
 主应用：使用多进程处理并发
 '''
 
+
 class QueueWithLock(object):
-    def __init__(self, name, lock: Lock):
-        self.lock = lock
+    def __init__(self, name):
         self.q = Queue()
         self.name = name
 
@@ -31,7 +30,6 @@ class QueueWithLock(object):
 
     def put(self, item, block=True, timeout=None):
         try:
-            self.lock.acquire()
             t = self.now()
             ret = self.q.put(item, block, timeout)
             dt = (self.now() - t).microseconds // 1000
@@ -39,13 +37,10 @@ class QueueWithLock(object):
                 logger.info('Put object takes {} ms, qsize: {}'.format(dt, self.qsize()))
         except Empty:
             pass
-        finally:
-            self.lock.release()
         return ret
 
     def put_many(self, items, block=True, timeout=None):
         try:
-            self.lock.acquire()
             t = self.now()
             for item in items:
                 self.q.put(item, block, timeout)
@@ -53,39 +48,33 @@ class QueueWithLock(object):
             logger.info('Put {} object takes {} ms, qsize: {}'.format(len(items), dt, self.qsize()))
         except Empty:
             pass
-        finally:
-            self.lock.release()
 
-    def get(self):
+    def get(self, block=False, timeout=None):
         try:
-            self.lock.acquire()
             t = self.now()
-            ret = self.q.get(block=False)
+            ret = self.q.get(block, timeout)
             dt = (self.now() - t).microseconds // 1000
             if dt > 500:
-                logger.info('[{}][{}] {} - Get object takes {} ms, qsize: {}'.format(
-                    self.now(), self.name, os.getpid(), dt, self.qsize()))
+                logger.info('[{}] - Get object takes {} ms, qsize: {}'.format(self.name, dt, self.qsize()))
         except Empty:
             pass
-        finally:
-            self.lock.release()
+
         return ret
 
-    def get_many(self, n=2):
+    def get_many(self, n=2, block=False, timeout=None):
         result = []
         try:
             t = self.now()
-            self.lock.acquire()
             while n > 0:
-                result.append(self.q.get(block=False))
+                if self.q.empty():
+                    break
+                result.append(self.q.get(block, timeout))
                 n -= 1
         except Empty:
             pass
         finally:
-            self.lock.release()
             dt = (self.now() - t).microseconds // 1000
-            logger.info('[{}][{}] {} - Get {} objects takes {} ms, qsize: {}'.format(
-                self.now(), self.name, os.getpid(), len(result), dt, self.qsize()))
+            logger.info('[{}] - Get {} objects takes {} ms, qsize: {}'.format(self.name, len(result), dt, self.qsize()))
         return result
 
     def qsize(self):
@@ -124,6 +113,7 @@ class Job(object):
         self.is_running = False
 
         self.id = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+        self.app_config = app_config
 
     @classmethod
     def is_proxy_url(cls, url):
@@ -131,11 +121,11 @@ class Job(object):
         return pm.get_url_proxy(url) is not None
 
     @classmethod
-    def run_worker1(cls, job):
+    def run_worker_thread(cls, job):
         while job.is_running:
             tasks = job.task_queue.get_many()
             if not tasks:
-                time.sleep(1)
+                time.sleep(5)
                 continue
 
             task_results = []
@@ -149,7 +139,19 @@ class Job(object):
                     # job.data_queue.put((task, tr.data))
                     task_results.append((task, tr.data))
             job.data_queue.put_many(task_results)
-        logger.info('Task 1 thread done !')
+
+    @classmethod
+    def run_worker(cls, job):
+        logger.info("Start process")
+        set_app_config(job.app_config)
+        logger.info('app config:%s', get_app_config)
+        for i in range(3):
+            sub_thread = Thread(target=cls.run_worker_thread, args=(job,))
+            sub_thread.start()
+            logger.info("Start sub-thread: {}".format(sub_thread.ident))
+
+        while 1:
+            time.sleep(60)
 
     @classmethod
     def run_store(cls, job):
@@ -159,7 +161,7 @@ class Job(object):
             # 每2s存储一次数据
             # time.sleep(1)
             grouped_data = defaultdict(lambda: [])
-            for task, data in job.data_queue.get_many(1024):
+            for task, data in job.data_queue.get_many(1024, block=True):
                 grouped_data[task.rule.name].append(data)
 
             if not grouped_data:
@@ -183,7 +185,7 @@ class Job(object):
 
         for url in self.urls:
             self.task_queue.put(Task(url=url, rule=Rule.find_by_name(self.rule_name)))
-        self.worker_processes = [Process(target=self.run_worker1, args=(self,)) for i in
+        self.worker_processes = [Process(target=self.run_worker, args=(self,)) for i in
                                  range(self.process_count)]
 
         self.data_process = Process(target=self.run_store, args=(self,))
@@ -223,22 +225,22 @@ class App(BaseApp):
     my_app.schedule()
     """
 
-    def __init__(self, name: str, url: (str, list), rule_name: str):
+    def __init__(self, name: str, urls: list, rule_name: str):
         """
         初始化一个抓取应用
         :param name: 应用名
-        :param url: 入口链接
+        :param urls: 入口链接
         :param rule_name: 入口链接内容对应的解析规则
         """
         self._name = name
         app_config.app_name = name
-        self._urls = [Url(i) for i in url] if isinstance(url, list) else [Url(url)]
+        self._urls = [Url(url) for url in urls]
         self._rule_name = rule_name
         self._current_job = None
         self._process_count = 1
-        self._task_queue = QueueWithLock('TaskQueue', Lock())
-        self._data_queue = QueueWithLock('DataQueue', Lock())
-        super(App, self).__init__(name, url, rule_name)
+        self._task_queue = QueueWithLock('TaskQueue')
+        self._data_queue = QueueWithLock('DataQueue')
+        super(App, self).__init__(name, urls, rule_name)
 
     def start_job(self):
         self._current_job = Job(self._name, self._urls, self._rule_name,
@@ -253,5 +255,5 @@ class App(BaseApp):
 
 if __name__ == '__main__':
     app_config.proxy_mapping = ProxyMapping.of_asdl_high()
-    app = App('sync_app', rule_name='jd_page', url='https://list.jd.hk/list.html?cat=1316,1381,1389&page=1')
+    app = App('sync_app', rule_name='jd_page', urls=['https://list.jd.hk/list.html?cat=1316,1381,1389&page=1'])
     app.schedule()

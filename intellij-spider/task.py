@@ -32,6 +32,9 @@ class Task(object):
             for url, rule in pr.linked_urls.items():
                 new_url = self.wrap_new_url(url)
                 if new_url:
+                    # avoid new task is exactly same with parent task
+                    if new_url.value == self.url.value and rule == self.rule.name:
+                        continue
                     new_links[new_url] = rule
             result = TaskResult(task=self, ok=True, data=pr.data, linked_urls=new_links)
         return result

@@ -5,25 +5,25 @@ import datetime
 
 from common.annotation import time_it
 from config import *
-from config import app_config
+from config import get_app_config
 from common.log import logger
 from common.util import now, take_ms
 
-if app_config.cache_mode == CacheMode.ELASTICSEARCH:
+if get_app_config().cache_mode == CacheMode.ELASTICSEARCH:
     from elasticsearch import Elasticsearch
 
 
 class EsClient(object):
     HOSTS = ['192.168.0.1', '192.168.0.2', '192.168.0.3']
-    INDEX = 'my-index'
+    INDEX = 'index-'
     TYPE = 'default'
-    KEY = 'my_data'
+    KEY = 'data'
 
     INSTANCE = None
     MAX_ID_LENGTH = 256
 
     def __init__(self):
-        self.app_name = app_config.app_name
+        self.app_name = get_app_config().app_name
         self.client = Elasticsearch(hosts=self.HOSTS)
 
     @staticmethod
@@ -153,7 +153,7 @@ def daily_es_cache_for_str(func):
     return wrapper
 
 
-daily_cache = daily_file_cache_for_str if app_config.cache_mode == CacheMode.LOCAL_FILE else daily_es_cache_for_str
+daily_cache = daily_file_cache_for_str if get_app_config().cache_mode == CacheMode.LOCAL_FILE else daily_es_cache_for_str
 
 if __name__ == '__main__':
     es = EsClient()

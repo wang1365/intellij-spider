@@ -1,5 +1,5 @@
 from network.urlloader import Url
-from config import app_config
+from config import get_app_config
 
 
 class BaseApp(object):
@@ -18,9 +18,10 @@ class BaseApp(object):
         :param rule_name: 入口链接内容对应的解析规则
         """
         self.name = name
-        app_config.app_name = name
+        get_app_config().app_name = name
         self.urls = [Url(i) for i in url] if isinstance(url, list) else [Url(url)]
         self.rule_name = rule_name
         self.current_job = None
         self.normal_thread_count = 1
         self.proxy_thread_count = 1
+        self.config = get_app_config()

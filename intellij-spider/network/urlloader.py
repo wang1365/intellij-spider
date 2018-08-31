@@ -2,7 +2,7 @@ import requests
 import datetime
 import time
 from threading import current_thread
-from config import app_config
+from config import get_app_config
 from common.cache import daily_cache
 from common.log import logger
 
@@ -81,6 +81,7 @@ class UrlLoader(object):
             headers['referer'] = referer
 
         # 代理设置
+        app_config = get_app_config()
         proxies = app_config.proxy_mapping.get_url_proxy(url)
         logger.info('Start request url: {}, proxy: {}'.format(url, proxies))
 
@@ -112,6 +113,9 @@ class UrlLoader(object):
                     if app_config.fail_conditions.test(url, result):
                         ok = True
                         break
+                    else:
+                        # 被反扒，等待4s 代理地址切换
+                        time.sleep(4)
                 else:
                     logger.info('[{}] request url failed, takes {}ms, code:{}-{}'.format(i, dt, res.status_code, res.reason))
                     time.sleep(0.5)
@@ -121,7 +125,3 @@ class UrlLoader(object):
                 # traceback.print_exc()
             time.sleep(0.1)
         return ok, result
-
-
-if __name__ == '__main__':
-    UrlLoader.load(url='http://www.baidu.com/aaaaa')

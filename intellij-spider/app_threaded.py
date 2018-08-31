@@ -11,7 +11,7 @@ from task import Task
 from threading import Thread
 import queue
 from config import *
-from config import app_config
+from config import get_app_config
 from common.log import logger
 from common.util import writelines
 
@@ -22,7 +22,7 @@ from common.util import writelines
 
 class DataQueue(queue.Queue):
     def put(self, item, block=True, timeout=None):
-        if not app_config.no_save:
+        if not get_app_config().no_save:
             return super().put(item, block, timeout)
         else:
             return None
@@ -58,7 +58,7 @@ class Job(object):
     my_app.schedule()
     """
 
-    def __init__(self, name: str, urls: list, rule_name: str, normal_thread_count=2, proxy_thread_count=1):
+    def __init__(self, name: str, urls: list, rule_name: str, normal_thread_count=2):
         """
         初始化一个抓取应用
         :param name: 应用名
@@ -74,18 +74,12 @@ class Job(object):
         self.worker_normal_threads = []
         self.normal_thread_count = 1
 
-        # 使用代理的下载queue2/worker_proxy_threads
-        self.task_proxy_queue = None
-        self.worker_proxy_threads = []
-        self.proxy_thread_count = 1
-
         # 解析结果存储 data_queue / store_thread
         self.data_queue = None
         self.store_thread = None
 
         self.is_running = False
         self.normal_thread_count = normal_thread_count
-        self.proxy_thread_count = proxy_thread_count
 
     @property
     def name(self):
@@ -93,12 +87,12 @@ class Job(object):
 
     @classmethod
     def is_proxy_url(cls, url):
-        pm = app_config.proxy_mapping
+        pm = get_app_config().proxy_mapping
         return pm.get_url_proxy(url) is not None
 
     @classmethod
-    def run_worker(cls, app, is_proxy_queue):
-        task_queue = app.task_normal_queue if not is_proxy_queue else app.task_proxy_queue
+    def run_worker(cls, app):
+        task_queue = app.task_normal_queue
         while app.is_running:
             try:
                 task = task_queue.get(block=False)
@@ -108,12 +102,8 @@ class Job(object):
             tr = task.execute()
             if tr.sub_tasks:
                 for t in tr.sub_tasks:
-                    if cls.is_proxy_url(t.url.value):
-                        app.task_proxy_queue.put(t)
-                        logger.info('Add to task queue(proxy):{}, {}'.format(t.url, app.task_proxy_queue.qsize()))
-                    else:
-                        app.task_normal_queue.put(t)
-                        logger.info('Add to task queue(normal):{}, {}'.format(t.url, app.task_normal_queue.qsize()))
+                    app.task_normal_queue.put(t)
+                    logger.info('Add to task queue(normal):{}, {}'.format(t.url, app.task_normal_queue.qsize()))
 
             if tr.data:
                 app.data_queue.put((task, tr.data))
@@ -155,20 +145,13 @@ class Job(object):
         self.task_normal_queue = Queue()
         for url in self._urls:
             self.task_normal_queue.put(Task(url=url, rule=Rule.find_by_name(self._rule_name)))
-        self.worker_normal_threads = [Thread(target=self.run_worker, args=(self, False)) for i in
+        self.worker_normal_threads = [Thread(target=self.run_worker, args=(self,)) for i in
                                       range(self.normal_thread_count)]
-
-        self.task_proxy_queue = Queue()
-        self.worker_proxy_threads = [Thread(target=self.run_worker, args=(self, True)) for i in
-                                     range(self.proxy_thread_count)]
 
         self.data_queue = DataQueue()
         self.store_thread = Thread(target=self.run_store, args=(self,))
 
         for t in self.worker_normal_threads:
-            t.start()
-            time.sleep(0.5)
-        for t in self.worker_proxy_threads:
             t.start()
             time.sleep(0.5)
 
@@ -179,10 +162,6 @@ class Job(object):
         self.is_running = False
         for thread in self.worker_normal_threads:
             logger.info('Wait work1 thread end:', thread.name)
-            if thread.isAlive():
-                thread.join()
-        for thread in self.worker_proxy_threads:
-            logger.info('Wait work2 thread end:', thread.name)
             if thread.isAlive():
                 thread.join()
         logger.info('Wait store thread end')
@@ -215,16 +194,15 @@ class App(BaseApp):
         super(App, self).__init__(name, url, rule_name)
 
     def start_job(self):
-        job = Job(self.name, self.urls, self.rule_name, self.normal_thread_count,
-                  self.proxy_thread_count)
+        job = Job(self.name, self.urls, self.rule_name, self.normal_thread_count)
         job.start()
 
-    def schedule(self, normal_thread_count=2, proxy_thread_count=10, ):
-        self.normal_thread_count, self.proxy_thread_count = normal_thread_count, proxy_thread_count
+    def schedule(self, normal_thread_count=2):
+        self.normal_thread_count = normal_thread_count
         self.start_job()
 
 
 if __name__ == '__main__':
-    app_config.proxy_mapping = ProxyMapping.of_asdl_high()
+    get_app_config().proxy_mapping = ProxyMapping.of_asdl_high()
     app = App('sync_app', rule_name='jd_page', url='https://list.jd.hk/list.html?cat=1316,1381,1389&page=1')
     app.schedule()

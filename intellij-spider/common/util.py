@@ -2,12 +2,20 @@ import datetime
 from pathlib import Path
 import json
 from common.log import logger
+import sys
+import pathlib
+
+entry_path = pathlib.Path(sys.argv[0])
+if entry_path.parent.parent.name != 'apps':
+    template_path = '.'
+else:
+    template_path = 'apps.' + entry_path.parent.name + '.templates.'
 
 
 def get_rule(name):
     rule_data = None
     try:
-        module = __import__('template.' + name, fromlist=(name))
+        module = __import__(template_path + name, fromlist=[name])
         rule_data = module.rule
     except ModuleNotFoundError as e:
         logger.error('ModuleNotFoundError, Cannot find rule by name. {} {}'.format(name, e))
@@ -63,4 +71,4 @@ def writelines(str_list, file_path: Path):
             try:
                 f.writelines(json.dumps(data, ensure_ascii=False) + '\n')
             except Exception as e:
-                logger.error('!!!!!!!!!!!!!!!!! Write failed'.format(e, data))
+                logger.error('!!!!!!!!!!!!!!!!! Write failed, {}'.format(e))
